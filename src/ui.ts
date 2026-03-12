@@ -12,9 +12,10 @@ function renderPage(params: {
   promptCount: number;
   lastPromptAt: string | null;
   lastResponse: string | null;
+  currentPromptId: string | null;
   message?: string;
 }): string {
-  const { pendingPrompt, promptCount, lastPromptAt, lastResponse, message } = params;
+  const { pendingPrompt, promptCount, lastPromptAt, lastResponse, currentPromptId, message } = params;
 
   return `<!doctype html>
 <html>
@@ -57,6 +58,16 @@ function renderPage(params: {
       font-size: 14px;
       margin-bottom: 16px;
     }
+    .prompt-id {
+      margin: 6px 0 16px;
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 8px;
+      background: #e2e8f0;
+      color: #0f172a;
+      font-size: 13px;
+      font-family: Consolas, "Courier New", monospace;
+    }
     textarea {
       width: 100%;
       min-height: 130px;
@@ -92,7 +103,8 @@ function renderPage(params: {
   <div class="wrap">
     <h1>Daily Learning Check-In</h1>
     <div class="status">${pendingPrompt ? 'Prompt waiting for your input' : 'No pending prompt right now'}</div>
-    <div class="meta">Prompts triggered: ${promptCount}<br/>Last prompt: ${lastPromptAt ?? 'n/a'}</div>
+    <div class="prompt-id">Current Prompt ID: ${currentPromptId ?? 'n/a'}</div>
+    <div class="meta">Workflow ID: ${workflowId}<br/>Prompts triggered: ${promptCount}<br/>Last prompt: ${lastPromptAt ?? 'n/a'}</div>
 
     ${message ? `<div class="message">${message}</div>` : ''}
 
@@ -102,6 +114,7 @@ function renderPage(params: {
 
     ${pendingPrompt ? `
       <form method="post" action="/submit">
+        <input type="hidden" name="promptId" value="${currentPromptId ?? ''}" />
         <label for="learning">What did you learn today?</label>
         <textarea id="learning" name="learning" required placeholder="Example: I learned how Temporal signals unblock a waiting workflow condition."></textarea>
         <button type="submit">Submit Learning</button>
@@ -132,6 +145,7 @@ app.get('/', async (_req, res) => {
 
 app.post('/submit', async (req, res) => {
   const text = String(req.body.learning ?? '').trim();
+  const promptId = String(req.body.promptId ?? '').trim();
   if (!text) {
     res.redirect('/');
     return;
@@ -141,9 +155,12 @@ app.post('/submit', async (req, res) => {
     const connection = await Connection.connect({ address: 'localhost:7233' });
     const client = new WorkflowClient({ connection });
     const handle = await getWorkflowHandle(client);
-    await handle.signal(submitLearningSignal, text);
+    await handle.signal(submitLearningSignal, { promptId, text });
     const status = await handle.query(getStatusQuery);
-    res.status(200).send(renderPage({ ...status, message: 'Learning submitted successfully.' }));
+    const message = status.pendingPrompt
+      ? 'Submission was ignored (prompt may be stale or not active).'
+      : 'Learning submitted successfully.';
+    res.status(200).send(renderPage({ ...status, message }));
   } catch (err) {
     res.status(500).send(`Failed to submit learning. Error: ${String(err)}`);
   }

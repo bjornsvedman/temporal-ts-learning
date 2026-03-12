@@ -12,6 +12,7 @@ export interface LearningStatus {
   promptCount: number;
   lastPromptAt: string | null;
   lastResponse: string | null;
+  currentPromptId: string | null;
 }
 
 export interface WorkflowInput {
@@ -19,7 +20,9 @@ export interface WorkflowInput {
   minute: number;
 }
 
-export const submitLearningSignal = defineSignal<[string]>('submitLearning');
+type SubmitLearningPayload = string | { promptId?: string; text?: unknown };
+
+export const submitLearningSignal = defineSignal<[SubmitLearningPayload]>('submitLearning');
 export const triggerPromptSignal = defineSignal('triggerPrompt');
 export const getStatusQuery = defineQuery<LearningStatus>('getStatus');
 
@@ -42,29 +45,52 @@ export async function endOfDayLearningWorkflow(
   let promptCount = 0;
   let lastPromptAt: string | null = null;
   let lastResponse: string | null = null;
+  let currentPromptId: string | null = null;
 
-  setHandler(submitLearningSignal, (text: string) => {
+  function openPromptNow() {
+    if (pendingPrompt) {
+      return;
+    }
+
+    promptCount += 1;
+    pendingPrompt = true;
+    lastPromptAt = new Date(Date.now()).toISOString();
+    currentPromptId = `${Date.now()}-${promptCount}`;
+  }
+
+  setHandler(submitLearningSignal, (payload: SubmitLearningPayload) => {
     if (!pendingPrompt) {
       return;
     }
 
-    const trimmed = text.trim();
+    let promptId: string | null = null;
+    let text: unknown = '';
+
+    if (typeof payload === 'string') {
+      text = payload;
+    } else if (payload && typeof payload === 'object') {
+      if (typeof payload.promptId === 'string') {
+        promptId = payload.promptId;
+      }
+      text = payload.text;
+    }
+
+    if (promptId && (!currentPromptId || promptId !== currentPromptId)) {
+      return;
+    }
+
+    const trimmed = typeof text === 'string' ? text.trim() : String(text ?? '').trim();
     if (!trimmed) {
       return;
     }
 
     lastResponse = trimmed;
     pendingPrompt = false;
+    currentPromptId = null;
   });
 
   setHandler(triggerPromptSignal, () => {
-    if (pendingPrompt) {
-      return;
-    }
-
-    pendingPrompt = true;
-    promptCount += 1;
-    lastPromptAt = new Date(Date.now()).toISOString();
+    openPromptNow();
   });
 
   setHandler(getStatusQuery, () => ({
@@ -72,15 +98,14 @@ export async function endOfDayLearningWorkflow(
     promptCount,
     lastPromptAt,
     lastResponse,
+    currentPromptId,
   }));
 
   while (true) {
     const waitMs = msUntilNextPrompt(input.hour24, input.minute);
     await sleep(waitMs);
 
-    pendingPrompt = true;
-    promptCount += 1;
-    lastPromptAt = new Date(Date.now()).toISOString();
+    openPromptNow();
 
     await condition(() => !pendingPrompt);
   }
