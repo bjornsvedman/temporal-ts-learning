@@ -1,6 +1,6 @@
 import express from 'express';
 import { Connection, WorkflowClient } from '@temporalio/client';
-import { getStatusQuery, submitLearningSignal } from './workflows';
+import { getStatusQuery, submitLearningSignal, triggerPromptSignal } from './workflows';
 
 const app = express();
 app.use(express.urlencoded({ extended: false }));
@@ -96,6 +96,10 @@ function renderPage(params: {
 
     ${message ? `<div class="message">${message}</div>` : ''}
 
+    <form method="post" action="/trigger">
+      <button type="submit">Trigger Daily Prompt Now</button>
+    </form>
+
     ${pendingPrompt ? `
       <form method="post" action="/submit">
         <label for="learning">What did you learn today?</label>
@@ -142,6 +146,20 @@ app.post('/submit', async (req, res) => {
     res.status(200).send(renderPage({ ...status, message: 'Learning submitted successfully.' }));
   } catch (err) {
     res.status(500).send(`Failed to submit learning. Error: ${String(err)}`);
+  }
+});
+
+app.post('/trigger', async (_req, res) => {
+  try {
+    const connection = await Connection.connect({ address: 'localhost:7233' });
+    const client = new WorkflowClient({ connection });
+    const handle = await getWorkflowHandle(client);
+    await handle.signal(triggerPromptSignal);
+    const status = await handle.query(getStatusQuery);
+    const message = 'Daily prompt is now pending.';
+    res.status(200).send(renderPage({ ...status, message }));
+  } catch (err) {
+    res.status(500).send(`Failed to trigger prompt. Error: ${String(err)}`);
   }
 });
 

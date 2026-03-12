@@ -20,6 +20,7 @@ export interface WorkflowInput {
 }
 
 export const submitLearningSignal = defineSignal<[string]>('submitLearning');
+export const triggerPromptSignal = defineSignal('triggerPrompt');
 export const getStatusQuery = defineQuery<LearningStatus>('getStatus');
 
 function msUntilNextPrompt(hour24: number, minute: number): number {
@@ -54,6 +55,16 @@ export async function endOfDayLearningWorkflow(
 
     lastResponse = trimmed;
     pendingPrompt = false;
+  });
+
+  setHandler(triggerPromptSignal, () => {
+    if (pendingPrompt) {
+      return;
+    }
+
+    pendingPrompt = true;
+    promptCount += 1;
+    lastPromptAt = new Date(Date.now()).toISOString();
   });
 
   setHandler(getStatusQuery, () => ({
