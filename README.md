@@ -1,10 +1,12 @@
 # Temporal TypeScript Daily Learning App
 
-This sample starts a long-running Temporal workflow that triggers an end-of-day prompt and exposes a small UI for submitting what you learned.
+This sample starts a Temporal workflow saga that triggers one end-of-day prompt each day for five days, then runs a final activity that summarizes and saves the week.
 
 ## What It Includes
 
-- Temporal workflow: waits until configured hour/minute each day and opens a prompt
+- Temporal workflow saga: waits until configured hour/minute each day and opens a prompt
+- Five-day completion rule: accepts exactly five daily answers and then completes
+- Final activity: summarizes all five days and returns a saved summary result
 - Worker: executes the workflow
 - UI: asks "What did you learn today?" and signals the workflow with your answer
 

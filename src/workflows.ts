@@ -4,8 +4,9 @@ import {
   defineSignal,
   proxyActivities,
   setHandler,
-  sleep,
 } from '@temporalio/workflow';
+import type * as weeklyActivities from './activities.js';
+import type { DailyLearningAnswer, SummarySaveResult } from './activities.js';
 
 export interface LearningStatus {
   pendingPrompt: boolean;
@@ -13,12 +14,18 @@ export interface LearningStatus {
   lastPromptAt: string | null;
   lastResponse: string | null;
   currentPromptId: string | null;
+  answers: DailyLearningAnswer[];
+  completed: boolean;
+  summary: string | null;
+  summarySavedAt: string | null;
 }
 
 export interface WorkflowInput {
   hour24: number;
   minute: number;
 }
+
+const REQUIRED_ANSWERS = 5;
 
 type SubmitLearningPayload = string | { promptId?: string; text?: unknown };
 
@@ -41,20 +48,29 @@ function msUntilNextPrompt(hour24: number, minute: number): number {
 export async function endOfDayLearningWorkflow(
   input: WorkflowInput = { hour24: 18, minute: 0 }
 ): Promise<void> {
+  const { summarizeAndSaveWeek } = proxyActivities<typeof weeklyActivities>({
+    startToCloseTimeout: '1 minute',
+  });
+
   let pendingPrompt = false;
   let promptCount = 0;
   let lastPromptAt: string | null = null;
   let lastResponse: string | null = null;
   let currentPromptId: string | null = null;
+  let currentPromptedAt: string | null = null;
+  const answers: DailyLearningAnswer[] = [];
+  let completed = false;
+  let summaryResult: SummarySaveResult | null = null;
 
   function openPromptNow() {
-    if (pendingPrompt) {
+    if (pendingPrompt || completed || answers.length >= REQUIRED_ANSWERS) {
       return;
     }
 
     promptCount += 1;
     pendingPrompt = true;
     lastPromptAt = new Date(Date.now()).toISOString();
+    currentPromptedAt = lastPromptAt;
     currentPromptId = `${Date.now()}-${promptCount}`;
   }
 
@@ -84,9 +100,22 @@ export async function endOfDayLearningWorkflow(
       return;
     }
 
+    const dayNumber = answers.length + 1;
+    answers.push({
+      dayNumber,
+      promptedAt: currentPromptedAt,
+      respondedAt: new Date(Date.now()).toISOString(),
+      response: trimmed,
+    });
+
     lastResponse = trimmed;
     pendingPrompt = false;
+    currentPromptedAt = null;
     currentPromptId = null;
+
+    if (answers.length >= REQUIRED_ANSWERS) {
+      completed = true;
+    }
   });
 
   setHandler(triggerPromptSignal, () => {
@@ -99,14 +128,21 @@ export async function endOfDayLearningWorkflow(
     lastPromptAt,
     lastResponse,
     currentPromptId,
+    answers: [...answers],
+    completed,
+    summary: summaryResult?.summary ?? null,
+    summarySavedAt: summaryResult?.savedAt ?? null,
   }));
 
-  while (true) {
+  while (!completed) {
     const waitMs = msUntilNextPrompt(input.hour24, input.minute);
-    await sleep(waitMs);
+    const wokeBySignal = await condition(() => pendingPrompt || completed, waitMs);
+    if (!wokeBySignal) {
+      openPromptNow();
+    }
 
-    openPromptNow();
-
-    await condition(() => !pendingPrompt);
+    await condition(() => !pendingPrompt || completed);
   }
+
+  summaryResult = await summarizeAndSaveWeek(answers);
 }

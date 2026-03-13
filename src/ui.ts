@@ -13,9 +13,39 @@ function renderPage(params: {
   lastPromptAt: string | null;
   lastResponse: string | null;
   currentPromptId: string | null;
+  answers: Array<{
+    dayNumber: number;
+    promptedAt: string | null;
+    respondedAt: string;
+    response: string;
+  }>;
+  completed: boolean;
+  summary: string | null;
+  summarySavedAt: string | null;
   message?: string;
 }): string {
-  const { pendingPrompt, promptCount, lastPromptAt, lastResponse, currentPromptId, message } = params;
+  const {
+    pendingPrompt,
+    promptCount,
+    lastPromptAt,
+    lastResponse,
+    currentPromptId,
+    answers,
+    completed,
+    summary,
+    summarySavedAt,
+    message,
+  } = params;
+
+  const answeredCount = answers.length;
+  const answerRows = answers
+    .map(
+      (answer) =>
+        `<li><strong>Day ${answer.dayNumber}:</strong> ${escapeHtml(answer.response)}<br/><small>Submitted at ${escapeHtml(
+          answer.respondedAt
+        )}</small></li>`
+    )
+    .join('');
 
   return `<!doctype html>
 <html>
@@ -97,34 +127,71 @@ function renderPage(params: {
       border-radius: 10px;
       color: #334155;
     }
+    .progress {
+      margin: 12px 0;
+      font-weight: 600;
+      color: #0f172a;
+    }
+    .summary {
+      margin-top: 18px;
+      padding: 14px;
+      background: #ecfeff;
+      border: 1px solid #67e8f9;
+      border-radius: 10px;
+      color: #164e63;
+      white-space: pre-wrap;
+    }
+    .answers {
+      margin-top: 12px;
+      padding-left: 20px;
+      color: #334155;
+    }
+    .answers li {
+      margin-bottom: 10px;
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>Daily Learning Check-In</h1>
-    <div class="status">${pendingPrompt ? 'Prompt waiting for your input' : 'No pending prompt right now'}</div>
+    <div class="status">${completed ? 'Saga complete for this week' : pendingPrompt ? 'Prompt waiting for your input' : 'No pending prompt right now'}</div>
     <div class="prompt-id">Current Prompt ID: ${currentPromptId ?? 'n/a'}</div>
     <div class="meta">Workflow ID: ${workflowId}<br/>Prompts triggered: ${promptCount}<br/>Last prompt: ${lastPromptAt ?? 'n/a'}</div>
+    <div class="progress">Progress: ${answeredCount}/5 daily answers collected</div>
 
     ${message ? `<div class="message">${message}</div>` : ''}
 
-    <form method="post" action="/trigger">
-      <button type="submit">Trigger Daily Prompt Now</button>
-    </form>
+    ${completed ? '' : `
+      <form method="post" action="/trigger">
+        <button type="submit">Trigger Daily Prompt Now</button>
+      </form>
+    `}
 
-    ${pendingPrompt ? `
+    ${pendingPrompt && !completed ? `
       <form method="post" action="/submit">
         <input type="hidden" name="promptId" value="${currentPromptId ?? ''}" />
         <label for="learning">What did you learn today?</label>
         <textarea id="learning" name="learning" required placeholder="Example: I learned how Temporal signals unblock a waiting workflow condition."></textarea>
         <button type="submit">Submit Learning</button>
       </form>
-    ` : '<p>The workflow has no pending end-of-day prompt yet. Come back after the next scheduled time.</p>'}
+    ` : completed ? '<p>All five daily prompts are complete for this saga.</p>' : '<p>The workflow has no pending end-of-day prompt yet. Come back after the next scheduled time.</p>'}
 
-    <div class="history"><strong>Last submitted learning:</strong><br/>${lastResponse ?? 'No submission yet.'}</div>
+    <div class="history"><strong>Last submitted learning:</strong><br/>${escapeHtml(lastResponse ?? 'No submission yet.')}</div>
+    <ul class="answers">${answerRows || '<li>No daily answers yet.</li>'}</ul>
+
+    ${summary ? `<div class="summary"><strong>Saved weekly summary (${escapeHtml(summarySavedAt ?? 'n/a')}):</strong><br/>${escapeHtml(summary)}</div>` : ''}
   </div>
 </body>
 </html>`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 async function getWorkflowHandle(client: WorkflowClient) {

@@ -5,6 +5,7 @@
   "description": "Temporal TypeScript app with end-of-day learning prompt UI",
   "scripts": {
     "build": "tsc -p .",
+    "test": "tsx --test src/**/*.test.ts",
     "worker": "tsx src/worker.ts",
     "start-workflow": "tsx src/client.ts",
     "ui": "tsx src/ui.ts"
@@ -16,6 +17,7 @@
     "express": "^4.19.2"
   },
   "devDependencies": {
+    "@temporalio/testing": "^1.15.0",
     "@types/express": "^4.17.21",
     "@types/node": "^22.10.2",
     "tsx": "^4.19.2",
