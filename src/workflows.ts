@@ -20,6 +20,15 @@ export interface LearningStatus {
   summarySavedAt: string | null;
 }
 
+export interface WeeklyLearningView {
+  weekTarget: number;
+  completedDays: number;
+  pendingPrompt: boolean;
+  completed: boolean;
+  currentLearning: string;
+  answers: DailyLearningAnswer[];
+}
+
 export interface WorkflowInput {
   hour24: number;
   minute: number;
@@ -32,6 +41,7 @@ type SubmitLearningPayload = string | { promptId?: string; text?: unknown };
 export const submitLearningSignal = defineSignal<[SubmitLearningPayload]>('submitLearning');
 export const triggerPromptSignal = defineSignal('triggerPrompt');
 export const getStatusQuery = defineQuery<LearningStatus>('getStatus');
+export const getWeeklyLearningQuery = defineQuery<WeeklyLearningView>('getWeeklyLearning');
 
 function msUntilNextPrompt(hour24: number, minute: number): number {
   const now = new Date(Date.now());
@@ -132,6 +142,17 @@ export async function endOfDayLearningWorkflow(
     completed,
     summary: summaryResult?.summary ?? null,
     summarySavedAt: summaryResult?.savedAt ?? null,
+  }));
+
+  setHandler(getWeeklyLearningQuery, () => ({
+    weekTarget: REQUIRED_ANSWERS,
+    completedDays: answers.length,
+    pendingPrompt,
+    completed,
+    currentLearning: answers.length
+      ? answers.map((a) => `Day ${a.dayNumber}: ${a.response}`).join('\n')
+      : 'No learning submitted yet.',
+    answers: [...answers],
   }));
 
   while (!completed) {

@@ -44,6 +44,16 @@ npm run ui
 
 Open: http://localhost:3000
 
+## Query Current Weekly Learning
+
+While the workflow is running, you can query current weekly progress and answers:
+
+```bash
+npm run query-week
+```
+
+This calls the workflow query `getWeeklyLearning` on workflow id `daily-learning-workflow`.
+
 ## Notes
 
 - Task queue used: `daily-learning-queue`

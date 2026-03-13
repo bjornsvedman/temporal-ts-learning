@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc -p .",
     "test": "tsx --test src/**/*.test.ts",
+    "query-week": "tsx src/query-week.ts",
     "worker": "tsx src/worker.ts",
     "start-workflow": "tsx src/client.ts",
     "ui": "tsx src/ui.ts"
